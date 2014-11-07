@@ -1,0 +1,62 @@
+var libName = process.cwd().filename();
+
+/* Target constants */
+var output = "gcTest";
+var objOutputPath = "bin/";
+var objOutput = [];
+
+recursiveList(".").forEach(function(file) {
+	var ext = file.extension();
+	if (ext == ".c" || ext == ".asm") {
+		objOutput.push(objOutputPath + file.extension(".o"));
+	}
+});
+
+var cCompiler = "gcc";
+var cFlags = (
+	"-I ../../include/ " +
+	"-O0 -c -g -fno-builtin -ffunction-sections -fdata-sections " +
+	"-fno-signed-char -Wimplicit " +
+	"-Wall --std=gnu99"
+).split(" ");
+
+/* Helper functions */
+function link(target, dep) {
+	exec("gcc", ["-o", target].concat(dep));
+}
+
+function nasm(target, dep) 
+{
+	exec("nasm", ["-felf32"].concat(dep, "-o", target));
+}
+
+function cc(target, dep) {
+	exec(cCompiler, cFlags.concat(dep, "-o", target));
+}
+
+/* Targets */
+setDefault("everything");
+
+phony("everything", output);
+
+phony("clean", function() {
+	rm(objOutput.concat(output), ["r", "f"]);
+});
+
+phony("all", ["clean", "everything"]);
+
+target(output, objOutput.concat(link));
+
+targetRegex(/^.*\.o$/, $depExist, function(target) {
+	return target.replace(objOutputPath, "").extension(".asm");
+}, nasm);
+
+targetRegex(/^.*\.o$/, $depExist, function(target) {
+	return target.replace(objOutputPath, "").extension(".c");
+}, cc);
+
+mkdirIfNotExist(objOutputPath);
+for (var i = 0; i < objOutput.length; i++) {
+	var p = objOutput[i].parentDir();
+	mkdirIfNotExist(p);
+}
