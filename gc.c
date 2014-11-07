@@ -311,4 +311,5 @@ int main(void) {
     norlit_gc();
     norlit_freeReference((void **)ref);
     norlit_gc();
+    return 0;
 }
