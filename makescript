@@ -1,7 +1,7 @@
 var libName = process.cwd().filename();
 
 /* Target constants */
-var output = "gcTest";
+var output = "gc.a";
 var objOutputPath = "bin/";
 var objOutput = [];
 
@@ -22,7 +22,7 @@ var cFlags = (
 
 /* Helper functions */
 function link(target, dep) {
-	exec("gcc", ["-o", target].concat(dep));
+	exec("ar", ["crf", target].concat(dep));
 }
 
 function nasm(target, dep) 

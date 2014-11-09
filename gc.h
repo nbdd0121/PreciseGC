@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 /* Make it a trusy value to display debug messages */
-#define DISPLAY_DEBUG_MSG 1
+#define DISPLAY_DEBUG_MSG 0
 #define GC_MODE MARK_COMPACT_MODE
 
 #define REF_TABLE_SIZE (1024/sizeof(void*))
