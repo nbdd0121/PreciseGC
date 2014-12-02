@@ -28,8 +28,8 @@ static heapParition *active = NULL;
 static void addHeapParition(size_t heapSize);
 static void ensureSize(size_t size);
 static void ensureSizeC(heapParition **p, size_t size);
-static void markRef(void **ref);
-static void updateRef(void **ref);
+static void markRef(void **ref, int flags);
+static void updateRef(void **ref, int flags);
 
 static void *allocate(size_t heapSize) {
     return mmap(NULL, heapSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -86,10 +86,13 @@ static void ensureSizeC(heapParition **p, size_t size) {
     }
 }
 
-static void markRef(void **ref) {
+static void markRef(void **ref, int flags) {
     /* Very simple and standard mark procedure */
     if (!*ref)
         return;
+    if (flags == REFERENCE_WEAK) {
+        return;
+    }
     block *b = *ref - sizeof(block);
     if (b->gcFlag) {
         return;
@@ -104,12 +107,16 @@ static void markRef(void **ref) {
     }
 }
 
-static void updateRef(void **ref) {
+static void updateRef(void **ref, int flags) {
     /* Update reference, no difficulty */
     if (!*ref) {
         return;
     }
     block *b = *ref - sizeof(block);
+    if (!b->gcFlag) {
+        *ref = NULL;
+        return;
+    }
     void *newRef = b->compactPtr->data;
     if (DISPLAY_DEBUG_MSG) {
         if (newRef == *ref)
@@ -140,7 +147,7 @@ void norlit_gc(void) {
         printf("[NorlitGC] [Debug] GC starts\n");
     /* Initial marking: recursive marking from root, which is the reference table */
     for (int i = 0; i < REF_TABLE_SIZE; i++) {
-        markRef(&refTable[i]);
+        markRef(&refTable[i], REFERENCE_STRONG);
     }
     /* Calculate the target address of a block */
     heapParition *freeHeap = oldest;
@@ -164,7 +171,7 @@ void norlit_gc(void) {
     }
     /* Update pointers in reference table and in heap objects */
     for (int i = 0; i < REF_TABLE_SIZE; i++) {
-        updateRef(&refTable[i]);
+        updateRef(&refTable[i], REFERENCE_STRONG);
     }
     for (heapParition *p = oldest; p; p = p->next) {
         for (block *b = p->blocks; (size_t)b < (size_t)p + p->endPtr; b = (block *)((size_t)b + sizeof(block) + b->size)) {

@@ -11,10 +11,13 @@
 #define MARK_SWEEP_MODE 0
 #define MARK_COMPACT_MODE 1
 
+#define REFERENCE_WEAK   1
+#define REFERENCE_STRONG 0
+
 /* I cannot think of a proper name for this
  * In mark-compact GC, this could either be a function to mark object or update reference.
  */
-typedef void (*reference_indicator_t)(void **);
+typedef void (*reference_indicator_t)(void **, int flags);
 
 typedef struct {
     /* The mark functions will mark all references (pointers to hosted objects)

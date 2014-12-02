@@ -8,12 +8,16 @@ typedef struct block {
 
 static block *head = NULL;
 
-static void markRef(void **ref);
+static void markRef(void **ref, int flags);
+static void updateRef(void **ref, int flags);
 
-static void markRef(void **ref) {
+static void markRef(void **ref, int flags) {
     /* Very simple and standard mark procedure */
     if (!*ref)
         return;
+    if (flags == REFERENCE_WEAK) {
+        return;
+    }
     block *b = *ref - sizeof(block);
     if (b->gcFlag) {
         return;
@@ -25,6 +29,18 @@ static void markRef(void **ref) {
             b->finalizer->mark(*ref, markRef);
         } else if (DISPLAY_DEBUG_MSG)
             printf("[NorlitGC] [Debug] Block %p of size %d is marked without finalizer\n", b->data, b->size);
+    }
+}
+
+static void updateRef(void **ref, int flags) {
+    if (flags == REFERENCE_WEAK) {
+        if (!*ref)
+            return;
+        block *b = *ref - sizeof(block);
+        if (!b->gcFlag) {
+            *ref = NULL;
+        }
+        return;
     }
 }
 
@@ -47,9 +63,18 @@ void norlit_gc(void) {
     /* Initial marking: recursive marking from root, which is the reference table */
     for (int i = 0; i < REF_TABLE_SIZE; i++) {
         if (refTable[i]) {
-            printf("[Ref %p]", refTable[i]);
+            if (DISPLAY_DEBUG_MSG)
+                printf("[NorlitGC] [Debug] Reference to %p found", refTable[i]);
+            markRef(&refTable[i], REFERENCE_STRONG);
         }
-        markRef(&refTable[i]);
+    }
+    for (block *b = head; b; b = b->next) {
+        if (b->gcFlag) {
+            if (DISPLAY_DEBUG_MSG)
+                printf("[NorlitGC] [Debug] Find a marked block %p of size %d\n", b->data, b->size);
+            if (b->finalizer && b->finalizer->mark)
+                b->finalizer->mark(b->data, updateRef);
+        }
     }
     for (block *b = head, **prev = &head; b;) {
         if (!b->gcFlag) {
