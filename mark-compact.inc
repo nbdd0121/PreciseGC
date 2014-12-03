@@ -191,7 +191,7 @@ void norlit_gc(void) {
     }
     /* Move blocks around */
     for (heapParition *p = oldest; p; p = p->next) {
-        for (block *b = p->blocks; (size_t)b < (size_t)p + p->endPtr; b = (block *)((size_t)b + sizeof(block) + b->size)) {
+        for (block *b = p->blocks, *prefetch; prefetch = (block *)((size_t)b + sizeof(block) + b->size), (size_t)b < (size_t)p + p->endPtr; b=prefetch) {
             if (!b->gcFlag)
                 continue;
             block *target = b->compactPtr;

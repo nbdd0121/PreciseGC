@@ -5,7 +5,7 @@
 
 /* Make it a trusy value to display debug messages */
 #define DISPLAY_DEBUG_MSG 0
-#define GC_MODE MARK_COMPACT_MODE
+#define GC_MODE MARK_SWEEP_MODE
 
 #define REF_TABLE_SIZE (1024/sizeof(void*))
 #define MARK_SWEEP_MODE 0
