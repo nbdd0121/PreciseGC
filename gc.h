@@ -47,6 +47,27 @@ typedef struct {
 void *norlit_gcAlloc(size_t, norlit_finalizer_t *);
 
 /**
+ * Allocate a fixed chunk of memory with given size and finalizer.
+ * Different from gcAlloc, memory allocated from this function will not be GC-ed
+ * until freed. A fixed chunk is guaranteed not to be moved through GC.
+ *
+ * arg0: size_t size of the memory. If size is greater than the limit, allocator will abort.
+ * arg1: norlit_finalizer_t* finalizer, can be NULL.
+ * return: pointer to the allocated memory. Guaranteed to be non-NULL.
+ */
+void *norlit_gcAllocFixed(size_t, norlit_finalizer_t *);
+
+/**
+ * Free a fixed chunk of memory allocated by gcAllocFixed. After this call,
+ * the chunk should no longer be used, but this function call does not guarantee to free
+ * immediately. When calling the function, make sure no pointer to this chunk still exists.
+ * suitable as a root pointer.
+ *
+ * arg0: pointer to the allocated memory.
+ */
+void norlit_gcFreeFixed(void *);
+
+/**
  * Allocate a reference. The reference can be updated with the compact of GC.
  * Use this is highly recommanded since it is dangerous to use direct pointer to
  * the hosted memory, because the memory might be dangling if GC occured. It is

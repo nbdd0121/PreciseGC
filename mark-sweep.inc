@@ -57,6 +57,22 @@ void *norlit_gcAlloc(size_t size, norlit_finalizer_t *finalizer) {
     return b->data;
 }
 
+void *norlit_gcAllocFixed(size_t size, norlit_finalizer_t *finalizer) {
+    block *b = malloc(sizeof(block) + size);
+    b->size = size;
+    b->gcFlag = 2;
+    b->finalizer = finalizer;
+    b->next = head;
+    head = b;
+    memset(b->data, 0, size);
+    return b->data;
+}
+
+void norlit_gcFreeFixed(void *ptr) {
+    block *b = ptr - sizeof(block);
+    b->gcFlag = 0;
+}
+
 void norlit_gc(void) {
     if (DISPLAY_DEBUG_MSG)
         printf("[NorlitGC] [Debug] GC starts\n");
@@ -66,6 +82,14 @@ void norlit_gc(void) {
             if (DISPLAY_DEBUG_MSG)
                 printf("[NorlitGC] [Debug] Reference to %p found", refTable[i]);
             markRef(&refTable[i], REFERENCE_STRONG);
+        }
+    }
+    for (block *b = head; b; b = b->next) {
+        if (b->gcFlag == 2) {
+            b->gcFlag = 0;
+            void *ptr = b->data;
+            markRef(&ptr, REFERENCE_STRONG);
+            b->gcFlag = 2;
         }
     }
     for (block *b = head; b; b = b->next) {
@@ -93,7 +117,8 @@ void norlit_gc(void) {
         }
         if (DISPLAY_DEBUG_MSG)
             printf("[NorlitGC] [Debug] Find a marked block %p of size %d\n", b->data, b->size);
-        b->gcFlag = 0;
+        if (b->gcFlag != 2)
+            b->gcFlag = 0;
         prev = &b->next;
         b = b->next;
     }

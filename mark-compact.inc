@@ -13,6 +13,19 @@ typedef struct block {
     char data[];
 } block;
 
+typedef struct fixed_block {
+    struct fixed_block *prev;
+    struct fixed_block *next;
+    size_t size;
+    union {
+        size_t gcFlag;
+        /* We reuse the GC flag for compact pointer, since compactPtr cannot be zero */
+        struct block *compactPtr;
+    };
+    norlit_finalizer_t *finalizer;
+    char data[];
+} fixed_block;
+
 typedef struct heapParition {
     size_t size;
     size_t compactPtr;
@@ -24,6 +37,7 @@ typedef struct heapParition {
 
 static heapParition *oldest = NULL;
 static heapParition *active = NULL;
+static fixed_block *fixed = NULL;
 
 static void addHeapParition(size_t heapSize);
 static void ensureSize(size_t size);
@@ -142,12 +156,43 @@ void *norlit_gcAlloc(size_t size, norlit_finalizer_t *finalizer) {
     return b->data;
 }
 
+void *norlit_gcAllocFixed(size_t size, norlit_finalizer_t *finalizer) {
+    fixed_block *b = malloc(sizeof(fixed_block) + size);
+    b->size = size;
+    b->gcFlag = 1;
+    b->finalizer = finalizer;
+    if (fixed)
+        fixed->prev = b;
+    b->next = fixed;
+    b->prev = NULL;
+    fixed = b;
+    return b->data;
+}
+
+void norlit_gcFreeFixed(void *ptr) {
+    fixed_block *b = ptr - sizeof(fixed_block);
+    if (b->prev) {
+        b->prev->next = b->next;
+    } else {
+        fixed = b->next;
+    }
+    if (b->next) {
+        b->next->prev = b->prev;
+    }
+    free(b);
+}
+
 void norlit_gc(void) {
     if (DISPLAY_DEBUG_MSG)
         printf("[NorlitGC] [Debug] GC starts\n");
     /* Initial marking: recursive marking from root, which is the reference table */
     for (int i = 0; i < REF_TABLE_SIZE; i++) {
         markRef(&refTable[i], REFERENCE_STRONG);
+    }
+    for (fixed_block *f = fixed; f; f = f->next) {
+        void *ptr = f->data;
+        markRef(&ptr, REFERENCE_STRONG);
+        f->compactPtr = (block *)&f->size;
     }
     /* Calculate the target address of a block */
     heapParition *freeHeap = oldest;
@@ -173,6 +218,11 @@ void norlit_gc(void) {
     for (int i = 0; i < REF_TABLE_SIZE; i++) {
         updateRef(&refTable[i], REFERENCE_STRONG);
     }
+    for (fixed_block *f = fixed; f; f = f->next) {
+        void *ptr = f->data;
+        updateRef(&ptr, REFERENCE_STRONG);
+        f->gcFlag = 0;
+    }
     for (heapParition *p = oldest; p; p = p->next) {
         for (block *b = p->blocks; (size_t)b < (size_t)p + p->endPtr; b = (block *)((size_t)b + sizeof(block) + b->size)) {
             if (!b->gcFlag) {
@@ -191,7 +241,7 @@ void norlit_gc(void) {
     }
     /* Move blocks around */
     for (heapParition *p = oldest; p; p = p->next) {
-        for (block *b = p->blocks, *prefetch; prefetch = (block *)((size_t)b + sizeof(block) + b->size), (size_t)b < (size_t)p + p->endPtr; b=prefetch) {
+        for (block *b = p->blocks, *prefetch; prefetch = (block *)((size_t)b + sizeof(block) + b->size), (size_t)b < (size_t)p + p->endPtr; b = prefetch) {
             if (!b->gcFlag)
                 continue;
             block *target = b->compactPtr;
