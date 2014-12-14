@@ -102,7 +102,7 @@ static void ensureSizeC(heapParition **p, size_t size) {
 
 static void markRef(void **ref, int flags) {
     /* Very simple and standard mark procedure */
-    if (!*ref)
+    if (!*ref || ((size_t)*ref)&1)
         return;
     if (flags == REFERENCE_WEAK) {
         return;
