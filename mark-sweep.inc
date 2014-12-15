@@ -13,7 +13,7 @@ static void updateRef(void **ref, int flags);
 
 static void markRef(void **ref, int flags) {
     /* Very simple and standard mark procedure */
-    if (!*ref || ((size_t)*ref)&1)
+    if (!*ref || ((size_t)*ref) & 1)
         return;
     if (flags == REFERENCE_WEAK) {
         return;
@@ -34,7 +34,7 @@ static void markRef(void **ref, int flags) {
 
 static void updateRef(void **ref, int flags) {
     if (flags == REFERENCE_WEAK) {
-        if (!*ref)
+        if (!*ref || ((size_t)*ref) & 1)
             return;
         block *b = *ref - sizeof(block);
         if (!b->gcFlag) {

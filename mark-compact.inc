@@ -54,11 +54,6 @@ static void freeMemory(void *ptr, size_t size) {
 }
 
 static void addHeapParition(size_t heapSize) {
-    /* This could result in GC, and we will reuse these paritions */
-    if (active && active->next) {
-        active = active->next;
-        return;
-    }
     heapParition *new = allocate(heapSize);
     new->size = heapSize;
     new->compactPtr = sizeof(heapParition);
@@ -83,26 +78,25 @@ static void ensureSize(size_t size) {
      * serious and can be solved after a GC
      */
     if (!active || size + active->endPtr + sizeof(block) > active->size) {
-        if (size + sizeof(block) + sizeof(heapParition) > DEFAULT_HEAP_PARITION_SIZE) {
-            assert(0);
+        size_t blockSize = DEFAULT_HEAP_PARITION_SIZE;
+        while (size + sizeof(block) + sizeof(heapParition) > blockSize) {
+            blockSize *= 2;
         }
-        addHeapParition(DEFAULT_HEAP_PARITION_SIZE);
+        addHeapParition(blockSize);
     }
 }
 
 static void ensureSizeC(heapParition **p, size_t size) {
     /* Like ensureSize, but used when calculating the compacting address */
-    if (size + (*p)->compactPtr + sizeof(block) > (*p)->size) {
-        if (size + sizeof(block) + sizeof(heapParition) > DEFAULT_HEAP_PARITION_SIZE) {
-            assert(0);
-        }
+    while (*p && size + (*p)->compactPtr + sizeof(block) > (*p)->size) {
         *p = (*p)->next;
     }
+    assert(*p);
 }
 
 static void markRef(void **ref, int flags) {
     /* Very simple and standard mark procedure */
-    if (!*ref || ((size_t)*ref)&1)
+    if (!*ref || ((size_t)*ref) & 1)
         return;
     if (flags == REFERENCE_WEAK) {
         return;
@@ -123,7 +117,7 @@ static void markRef(void **ref, int flags) {
 
 static void updateRef(void **ref, int flags) {
     /* Update reference, no difficulty */
-    if (!*ref) {
+    if (!*ref || ((size_t)*ref) & 1) {
         return;
     }
     block *b = *ref - sizeof(block);
@@ -221,7 +215,6 @@ void norlit_gc(void) {
     for (fixed_block *f = fixed; f; f = f->next) {
         void *ptr = f->data;
         updateRef(&ptr, REFERENCE_STRONG);
-        f->gcFlag = 0;
     }
     for (heapParition *p = oldest; p; p = p->next) {
         for (block *b = p->blocks; (size_t)b < (size_t)p + p->endPtr; b = (block *)((size_t)b + sizeof(block) + b->size)) {
@@ -239,6 +232,9 @@ void norlit_gc(void) {
             }
         }
     }
+    for (fixed_block *f = fixed; f; f = f->next) {
+        f->gcFlag = 0;
+    }
     /* Move blocks around */
     for (heapParition *p = oldest; p; p = p->next) {
         for (block *b = p->blocks, *prefetch; prefetch = (block *)((size_t)b + sizeof(block) + b->size), (size_t)b < (size_t)p + p->endPtr; b = prefetch) {
@@ -255,16 +251,34 @@ void norlit_gc(void) {
         p->endPtr = p->compactPtr;
         p->compactPtr = sizeof(heapParition);
     }
-    /* We move back 'active' pointer to reuse these heap paritions */
-    active = freeHeap ? freeHeap : oldest;
-    for (heapParition *p = active->next; p;) {
-        heapParition *prefetch = p->next;
+
+
+    heapParition **lastPointer = &oldest;
+    while (*lastPointer) {
+        heapParition *par = *lastPointer;
         if (DISPLAY_DEBUG_MSG)
-            printf("[NorlitGC] [Debug] Heap parition at %p is freed\n", p);
-        freeMemory(p, p->size);
-        p = prefetch;
+            printf("[NorlitGC] [Debug] Find a block of size %d, %d occupied", par->size, par->endPtr);
+        if (par->endPtr == sizeof(heapParition)) {
+            *lastPointer = par->next;
+            freeMemory(par, par->size);
+            if (DISPLAY_DEBUG_MSG)
+                printf(", and freed");
+        } else {
+            active = par;
+            lastPointer = &par->next;
+        }
+        if (DISPLAY_DEBUG_MSG)
+            printf("\n");
     }
-    active->next = NULL;
+
+    /* We move back 'active' pointer to reuse these heap paritions */
+    /*    active = freeHeap ? freeHeap : oldest;
+        for (heapParition *p = oldest->next; p;) {
+            heapParition *prefetch = p->next;
+            p = prefetch;
+            printf("[Block %d->%d]", p->size, p->endPtr);
+        }
+        active->next = NULL;*/
     if (DISPLAY_DEBUG_MSG)
         printf("[NorlitGC] [Debug] GC finished\n");
 }
